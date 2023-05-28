@@ -1,4 +1,4 @@
-#Basic jpeg to ASCII converter
+# Basic jpeg to ASCII converter
 
 Run:
 ```
