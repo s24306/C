@@ -8,12 +8,12 @@
 
 const char * input_file;
 const char * output_file;
+double times = 1;
 
 #define MAX_COLOR_VALUE 255
 
 
-char ASCIItable[8] = {'@', '#', '0', 'o', '*', '"', '.', ' '};
-
+char ASCIItable[13] = {'@', '#', '0', 'o', '*', '"', '.', ' '};
 
 /* we will be using this uninitialized pointer later to store raw, uncompressd image */
 JSAMPARRAY row_pointers = NULL;
@@ -25,28 +25,36 @@ JDIMENSION height;
 int num_components;
 int quality = 75;
 J_COLOR_SPACE color_space;
+void write_file(const char *filename, char str[(int)(width/times)][((int)(height/times))]);
 
 char getASCII(float f){
-	return ASCIItable[(int)round(f*8)];
+	return ASCIItable[(int)round(f*7)];
 }
 
 void toASCII(){
-	int x, y;
   	if (color_space != JCS_RGB)  return;
 
-	char ASCIIarray[height][width + 1];
+	width = (int)(((int)(width/times)) * times);
+	height = (int)(((int)(height/times)) * times);
 
-	for(int y = 0; y < height; y++){
-		for(int x = 0; x < width; x++){
+	char ASCIIarray[(int)(width/times)][((int)(height/times))+1];
+
+	for(int y = 0; y < height;){
+		for(int x = 0; x < width;){
 			double ASCIIcharValue = 0;
-			JSAMPROW row = row_pointers[y];
-			JSAMPROW row_ptr = &(row[(x)*3]);
-			ASCIIcharValue += row_ptr[0] + row_ptr[1] + row_ptr[2];
-			double squareIntensity = ASCIIcharValue/(MAX_COLOR_VALUE*3);
-
-			ASCIIarray[y][x] = getASCII(squareIntensity);
+			for(int i = 0; i < times; i++){
+				for(int j = 0; j < times; j++){
+					JSAMPROW row = row_pointers[y+i];
+					JSAMPROW row_ptr = &(row[(x+j)*3]);
+					ASCIIcharValue += row_ptr[0] + row_ptr[1] + row_ptr[2];
+				}
+			}
+			double squareIntensity = ASCIIcharValue/(MAX_COLOR_VALUE*3*times*times);
+			ASCIIarray[(int)(y/times)][(int)(x/times)] = getASCII(squareIntensity);
+			x += times;
 		}
-		ASCIIarray[y][width] = '\n';
+		ASCIIarray[(int)(y/times)][(int)(width/times)] = '\n';
+		y += times;
 	}
 
 	for (int y=0; y<width; y++){
@@ -62,8 +70,6 @@ void process_file(){
 }
 
 
-
-
 void abort_(const char * s, ...)
 {
 	va_list args;
@@ -74,16 +80,16 @@ void abort_(const char * s, ...)
 	abort();
 }
 
-void write_file(const char *filename, char str[height][width]){
+void write_file(const char *filename, char str[(int)(width/times)][((int)(height/times))]){
 	FILE *outfile = fopen( filename, "at" );
 	if ( !outfile ){
 		abort_("Error opening output text file %s!\n", filename);
 	}
 
-	float* ptr;
+	char *ptr;
 	ptr = &str[0][0];
 
-	fwrite(ptr, 1, height * width + height, outfile );
+	fwrite(ptr, sizeof(char), (int)(width/times) * ((int)(height/times)) + (int)(width/times), outfile);
 
 	fclose(outfile);
 }
@@ -155,15 +161,18 @@ int main(int argc, char **argv){
   // Options
   struct arg_file *input_file_arg = arg_file1("i", "input-file", "<input>", "Input JPEG File");
   struct arg_file *output_file_arg = arg_file1("o", "out-file" , "<output>", "Output txt File");
+  struct arg_dbl *times_arg = arg_dbl0("t", "times" , "<times>", "Multiplyer");
   struct arg_lit *help = arg_lit0("h","help", "print this help and exit");
   struct arg_end *end = arg_end(10);
   
   int nerrors;
   
-  void *argtable[] = {input_file_arg, output_file_arg, help, end};
+  void *argtable[] = {input_file_arg, output_file_arg, times_arg, help, end};
   
   if (arg_nullcheck(argtable) != 0) printf("error: insufficient memory\n");
   
+  times_arg->dval[0] = 1;
+
   nerrors = arg_parse(argc, argv, argtable);
   
   if (help->count > 0){
@@ -177,6 +186,7 @@ int main(int argc, char **argv){
   if (nerrors==0){
      input_file = input_file_arg->filename[0];
      output_file = output_file_arg->filename[0];
+	 times = times_arg->dval[0];
   }
   else{
      arg_print_errors(stderr, end, "point");
